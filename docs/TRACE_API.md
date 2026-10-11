@@ -1,9 +1,10 @@
 # Phase 1: trace storage and ingestion
 
-Phase 1 implements a versioned JSON API and PostgreSQL persistence. The frontend remains
-the Phase 0 landing page. There is no SDK, exporter, automatic instrumentation, diagnosis,
-LLM integration, or visualization yet. Local PostgreSQL runtime verification is blocked;
-see `VERIFICATION.md` for actual executed checks.
+Phase 1 implements a versioned JSON API and PostgreSQL persistence. Phase 2A/2B add an
+explicit Python SDK/API exporter and Tool/LLM decorators in `sdk/`. Phase 3A's Trace
+Explorer consumes the existing read endpoints without changing these contracts;
+see `TRACE_EXPLORER.md`. Automatic framework instrumentation and diagnosis remain planned.
+Local PostgreSQL runtime verification passed; see `VERIFICATION.md` for executed checks.
 
 ## Layers and transactions
 
@@ -251,7 +252,7 @@ Offline SQL compilation does not require PostgreSQL or credentials:
 uv run python -m alembic upgrade head --sql
 uv run ruff check .
 uv run ruff format --check .
-uv run python -m pytest
+uv run --with ../sdk python -m pytest
 ```
 
 Without `TEST_DATABASE_URL`, PostgreSQL tests skip explicitly. For real integration
@@ -260,7 +261,7 @@ set `TEST_DATABASE_URL` in the terminal environment (credentials redacted here):
 
 ```powershell
 $env:TEST_DATABASE_URL = 'postgresql://agent_debugger:<encoded-local-password>@localhost:5432/agent_debugger_test'
-uv run python -m pytest -m postgres -rs
+uv run --with ../sdk python -m pytest -m postgres -rs
 ```
 
 This variable is intentionally read from the process environment rather than silently
@@ -276,7 +277,7 @@ local Compose still requires a password. CI execution has not been claimed local
 
 ## Preparing for Phase 2
 
-A future SDK/exporter can preserve trace/span IDs, parent context, name, timestamps,
+The Phase 2A SDK/exporter preserves trace/span IDs, parent context, name, timestamps,
 status, span kind and exception events, and map agent/LLM/tool semantics into attributes.
 The application project ID is additional routing context outside OpenTelemetry's span
 context. `operation_type` is an application classification; it does not replace span kind.
@@ -284,7 +285,10 @@ context. `operation_type` is an application classification; it does not replace 
 These are immutable ingestion snapshots: preferably export completed trace envelopes
 and ended spans, create the project/trace before its batches, and retry original payloads.
 Incomplete timings are accepted but cannot be finalized by overwriting an existing ID
-in Phase 1. Live lifecycle updates require a separately designed API; the initial Phase 2
-exporter should export completed records. Trace flags, tracestate, span links, resource/
-scope mapping, dropped-event counters, SDK buffering, transport retries, redaction hooks,
-and OTLP/OpenInference adapters are Phase 2 design work, not implemented functionality.
+in Phase 1. Live lifecycle updates require a separately designed API. The Phase 2A
+exporter buffers a bounded set of ended spans until the root ends, then submits the
+completed Trace and one span batch. It retries exact payloads with bounded timeouts and
+supports payload redaction. See `../sdk/README.md` for behavior and limitations.
+Trace flags/tracestate persistence, span links, resource/scope mapping, dropped-event
+counters, and OTLP/OpenInference adapters remain future design work. The Phase 1 API
+and database contracts were not changed for Phase 2A.

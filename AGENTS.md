@@ -5,8 +5,9 @@
 Agent Debugger is an open-source observability and debugging infrastructure project for
 LLM agents, not a general-purpose chatbot. Use a modular monolith: one backend service,
 one frontend application, and PostgreSQL. Read `docs/DEVELOPMENT_PLAN.md` before changing
-scope. Implement only the phase authorized by the user. Phase 1 is the current scope;
-stop for review before Phase 2. Never infer authorization to push, publish, or deploy.
+scope. Implement only the phase authorized by the user. Phase 3A (Trace Explorer and
+interactive execution tree) is the current scope; stop for review before further work.
+Never infer authorization to push, publish, or deploy.
 
 ## Repository responsibilities
 
@@ -20,9 +21,11 @@ stop for review before Phase 2. Never infer authorization to push, publish, or d
 - `backend/alembic/`: versioned, self-contained PostgreSQL migrations.
 - `backend/tests/`: backend unit and API tests.
 - `frontend/app/`: Next.js App Router pages, layouts, and global styles.
-- `frontend/components/`: reusable UI; `hooks/`: client lifecycle and state;
-  `lib/`: API clients and shared utilities.
-- `sdk/`: reserved for Phase 2 Python SDK and instrumentation.
+- `frontend/components/`: Trace Explorer, React Flow graph, safe span/event detail UI;
+  `hooks/`: abortable client requests and state; `lib/`: API contracts and tree construction.
+- `frontend/tests/`: Vitest/jsdom model, API, component and graph selection regression tests.
+- `sdk/src/agent_debugger/`: explicit OTel context-manager tracing and API exporter.
+- `sdk/tests/`: database-free SDK tests; SDK HTTP/PostgreSQL tests reuse backend fixtures.
 - `docs/`: design, roadmap, and verification records; `examples/`: later integrations.
 
 ## Conventions and development rules
@@ -35,15 +38,22 @@ stop for review before Phase 2. Never infer authorization to push, publish, or d
 - Add comments for non-obvious decisions. Preserve existing useful documentation.
 - Update the affected lockfile when changing dependencies. Use `uv sync --frozen` and `npm ci`.
 - SQLAlchemy 2, migrations, and PostgreSQL JSONB are implemented in Phase 1.
-  OpenTelemetry/OpenInference instrumentation, React Flow, and DeepSeek are planned;
-  add them only in their authorized phases.
+  Phase 2A/2B use OpenTelemetry API/SDK for explicit tracing and Tool/LLM decorators.
+  Phase 3A uses React Flow for the read-only execution tree. Automatic instrumentation,
+  OpenInference/OTLP adapters and DeepSeek remain planned; add them only
+  in their authorized phases. Do not replace the host application's global OTel provider.
 - Do not introduce Redis, Kafka, Kubernetes, microservices, agent frameworks, or
   additional external services without an explicit requirement.
 
 ## Testing and verification
 
 From `backend/`, run `uv run ruff check .`, `uv run ruff format --check .`, and
-`uv run python -m pytest`. From `frontend/`, run `npm run typecheck` and `npm run build`.
+`uv run --with-editable ../sdk python -m pytest`. From `sdk/`, run `uv run ruff check .`,
+`uv run ruff format --check .`, `uv run python -m pytest`, and `uv build`.
+From `frontend/`, run `npm test`, `npm run typecheck` and `npm run build` when frontend
+code changes. Component tests use a graph double except the real React Flow selection
+regression test, which uses DOM measurement shims. Verify actual graph interactions in
+a browser and report them separately from jsdom/build results.
 Validate `docker compose --env-file .env.example config --quiet` from the root.
 For infrastructure work, start services when the environment permits, check `/health`,
 check the landing page and its browser connection status, and execute a PostgreSQL query.

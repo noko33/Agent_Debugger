@@ -1,0 +1,34 @@
+[project]
+name = "agent-debugger-sdk"
+version = "0.1.0"
+description = "Explicit OpenTelemetry tracing for Agent Debugger"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "opentelemetry-api>=1.38,<2",
+    "opentelemetry-sdk>=1.38,<2",
+    "httpx>=0.28,<1",
+]
+
+[build-system]
+requires = ["uv_build>=0.13,<0.14"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "agent_debugger"
+
+[dependency-groups]
+dev = ["pytest>=8.3,<10", "ruff>=0.9,<1"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["agent_debugger"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

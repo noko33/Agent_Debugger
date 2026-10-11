@@ -6,7 +6,9 @@ Build a modular monolith with a separate Next.js frontend and PostgreSQL persist
 Each phase requires review before starting the next. The roadmap describes planned
 functionality, not existing capabilities. Phase 0 and Phase 1 code are implemented.
 Phase 0 and Phase 1 local runtime acceptance passed on 2026-10-12 after Docker/WSL
-recovery, including all 32 PostgreSQL integration tests. Phase 2 requires user review.
+recovery, including all 32 PostgreSQL integration tests. Phase 2A is authorized and
+implemented and locally verified. Phase 2B explicit Tool/LLM decorators are verified.
+Phase 3A adds the Trace Explorer and read-only execution tree; further scope requires review.
 Verification results and environment limitations are recorded in `VERIFICATION.md`.
 
 ## Phase 0 — Project initialization
@@ -48,7 +50,57 @@ self-parenting and cycles are rejected. Batches are transactional. See `TRACE_AP
 for API examples, instrumentation mapping, limits and tradeoffs. PostgreSQL-only tests
 cover real constraints, migrations, rollback and concurrency when a test database exists.
 
-## Phase 2 — Python SDK and OpenTelemetry instrumentation (planned)
+## Phase 2 — Python SDK and OpenTelemetry instrumentation (Phase 2A/2B implemented)
+
+### Phase 2A — Minimal explicit tracing SDK
+
+**Objectives:** instrument a Python Agent explicitly, reuse OpenTelemetry context, and
+export completed records into the existing Phase 1 API without changing its contracts.
+
+**Deliverables:** installable `agent-debugger-sdk` package; `AgentDebugger.trace()` and
+`span()` context managers yielding OTel spans; parent relationships, timestamps, attributes,
+status and exceptions; bounded synchronous API exporter with finite retries/redaction;
+example Agent; unit tests and real HTTP/PostgreSQL end-to-end tests; installation guide.
+
+**Acceptance criteria:** example trace and nested spans persist and can be retrieved;
+original Agent exceptions remain observable; API outages do not replace application
+results/exceptions; retries preserve existing idempotency; OTel contexts isolate async
+tasks and support standard thread attach/detach; SDK tests, backend regression, lint,
+and package builds pass. Stop for review before additional instrumentation.
+
+**Decisions and limits:** each `trace()` creates a fresh root with a private OTel provider.
+Ended spans are buffered until the root ends because Trace records are immutable. Send
+the complete Trace followed by one bounded span batch; delivery across these two requests
+is not atomic. There is no persistent queue or live update API. Child tasks must finish
+before the root; overflow drops the buffered trace. See `../sdk/README.md` for usage,
+context propagation, payload limits, redaction and failure behavior.
+
+### Phase 2B — Explicit LLM and Tool tracing (implemented; locally verified)
+
+**Objectives:** make sync/async function instrumentation convenient while preserving
+OTel context and the existing ingestion contracts. No framework interception.
+
+**Deliverables:** `trace_tool` and `trace_llm` decorators; opt-in argument/result shape
+metadata; caller/adapter-reported token counts; provider/model labels; type-only exception
+events; cancellation lifecycle fix; deterministic example with optional failure/recovery;
+unit tests and real HTTP/PostgreSQL round-trip tests.
+
+**Acceptance criteria:** sync/async calls preserve results and original exceptions;
+concurrent tasks do not leak parents; default payloads omit prompts, values and exception
+messages; unknown token counts remain absent; ingestion persists hierarchy and metadata;
+SDK/backend regression and lint pass. See `VERIFICATION.md` for actual results.
+
+**Limits:** explicit decorators only, no streaming/generator instrumentation. Export
+remains bounded and synchronous at root completion. No paid provider is required.
+Manual context managers retain detailed exceptions for compatibility; use
+`record_exception_details=False` for sensitive workloads. Stop for user review here.
+
+### Remaining Phase 2 — Planned, not authorized by Phase 2B
+
+Automatic framework instrumentation, remote trace continuation, OTLP/OpenInference
+adapters, broader resource/scope mapping, durable/background transport, and additional
+runtime controls require a separate design and authorization. The original full-phase
+objectives below remain the roadmap, not a claim of completed functionality.
 
 **Objectives:** capture execution context without coupling agent applications to storage.
 
@@ -60,7 +112,35 @@ redaction hooks, and shutdown/flush behavior; a small instrumented example.
 timestamps, errors, and tool boundaries survive round-trip; exporter outages do not crash
 the host application; SDK and exporter tests pass; sensitive fields can be redacted.
 
-## Phase 3 — Next.js dashboard and execution visualization (planned)
+## Phase 3 — Next.js dashboard and execution visualization (Phase 3A implemented)
+
+### Phase 3A — Trace Explorer and interactive execution tree
+
+**Objectives:** browse real stored executions, navigate parent-child relationships, and
+inspect recorded span/event metadata using existing read APIs.
+
+**Deliverables:** paginated trace list; abortable loading/error/retry states; complete
+paged span loading up to a documented 5,000-span bound; React Flow nodes for Agent/LLM/
+Tool/Runtime with status/exception indicators; pan/zoom/fit controls; accessible span
+list and parent navigation; safe text-only detail panel; frontend unit/component and
+real graph regression tests; actual browser verification against the existing backend.
+
+**Acceptance criteria:** the Phase 2B example renders seven spans and six recorded edges;
+Lookup parents Read local catalog; failure and recovery events remain inspectable;
+unknown timing/usage remains explicit; missing parents/cycles produce warnings without
+hiding spans; trace/API states and span selection are tested; TypeScript, production
+build, frontend tests and backend regression pass. Stop for user review after Phase 3A.
+
+**Decisions and limits:** reuse all Phase 1 APIs and database/SDK contracts. Graph position
+represents hierarchy, using stable start-time/ID ordering, not elapsed-time spacing.
+Use API-derived durations to retain microsecond precision. Attributes/events are escaped
+React text. No streaming, filtering dashboard expansion, diagnosis or repair is included.
+Large graph virtualization/performance tuning and further dashboard scope remain planned.
+
+### Full Phase 3 roadmap
+
+The original objectives below include the Phase 3A subset already delivered. Expanded
+filtering, dashboard capabilities and large-graph performance work require further review.
 
 **Objectives:** let developers find executions and inspect their structure and context.
 

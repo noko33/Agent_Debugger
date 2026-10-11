@@ -20,8 +20,18 @@ passed on 2026-10-12: all three Docker services, migrations, live APIs, browser 
 and 89 backend tests including 32 PostgreSQL integration tests were verified.
 See [verification results](docs/VERIFICATION.md) for checks actually run and limitations.
 
-**Planned features:** Python SDK, OpenTelemetry/OpenInference
-instrumentation, execution graphs, failure classification, LLM-assisted diagnosis,
+**Phase 2A:** a minimal installable Python SDK with explicit OpenTelemetry Trace/Span
+context managers, bounded API export, safe failures, redaction, and a local Agent example.
+**Phase 2B:** sync/async Tool and LLM decorators, safe opt-in shape metadata, explicit
+token usage adapters, cancellation handling, and a no-provider example with recovery.
+See [SDK installation and usage](sdk/README.md). Further work requires review.
+
+**Phase 3A:** a real-data Trace Explorer at `/`, paginated trace browsing, interactive
+React Flow execution tree, exception/status indicators, and safe span/event details.
+See [Explorer usage and limits](docs/TRACE_EXPLORER.md).
+
+**Planned features:** automatic instrumentation, OTLP/OpenInference adapters,
+expanded dashboard features, failure classification, LLM-assisted diagnosis,
 and fix recommendations. None of these features is implemented yet.
 
 ## Proposed technology stack
@@ -29,13 +39,13 @@ and fix recommendations. None of these features is implemented yet.
 | Area | Implemented/configured | Planned additions |
 | --- | --- | --- |
 | Backend | Python 3.11+, FastAPI, Pydantic v2, Pydantic Settings, SQLAlchemy 2, Alembic, psycopg | — |
-| Frontend | Next.js App Router, React, strict TypeScript, Tailwind CSS | React Flow |
+| Frontend | Next.js App Router, React, strict TypeScript, Tailwind CSS, React Flow | Expanded dashboard |
 | Database | PostgreSQL 17, persistent volume, trace schema and JSONB attributes; runtime verified | — |
-| Observability | — | Python SDK, OpenTelemetry, OpenInference |
+| Observability | Explicit Python tracing SDK using OpenTelemetry; ingestion API exporter | Automatic instrumentation, OTLP/OpenInference adapters |
 | Diagnosis | — | Rule-based detection, DeepSeek API with validated structured outputs |
 | Tooling | uv, Ruff, pytest, npm, GitHub Actions, Docker Compose | Expanded integration/release checks |
 
-Dependencies are locked in `backend/uv.lock` and `frontend/package-lock.json`.
+Dependencies are locked in `backend/uv.lock`, `sdk/uv.lock`, and `frontend/package-lock.json`.
 No Redis, Kafka, Kubernetes, or microservices are required.
 
 ## Architecture and repository
@@ -43,12 +53,12 @@ No Redis, Kafka, Kubernetes, or microservices are required.
 ```text
 Browser → Next.js frontend → FastAPI modular monolith → PostgreSQL
                                 ↑
-                    Python SDK / instrumentation (planned)
+                    Python SDK (explicit Phase 2A/2B tracing)
 ```
 
-The browser calls `GET /health` directly on FastAPI. Phase 1 adds database-backed
-`/api/v1` routes. Compose checks PostgreSQL, applies migrations, and then starts the API.
-Native runs apply migrations explicitly. The frontend remains the Phase 0 landing page.
+The browser calls the existing FastAPI `/api/v1` trace list/detail/span APIs directly.
+Compose checks PostgreSQL, applies migrations, and then starts the API. Native runs
+apply migrations explicitly. The frontend displays stored traces and execution trees.
 `/health` reports API liveness, not database or platform readiness.
 
 ```text
@@ -67,9 +77,9 @@ frontend/
   components/   connection status UI
   hooks/        connection lifecycle
   lib/          typed API client
-sdk/            reserved for Phase 2
+sdk/            Python tracing package, exporter, and unit tests
 docs/           development plan and verification
-examples/       reserved for later integration examples
+examples/       minimal Agent with explicit tracing
 .github/workflows/ci.yml
 ```
 
@@ -108,7 +118,8 @@ to support Docker Desktop bind mounts.
 
 ## Native development and checks
 
-Install Python 3.11+, uv, and Node.js 22+; Node 22 is used in Docker and CI.
+Install Python 3.11+, uv, and Node.js 22.22.2+ on the 22.x line, or 24.15.0+ on
+the 24.x line (Node 26+ is also supported). Node 22 is used in Docker and CI.
 See the official [Next.js setup guide](https://nextjs.org/docs/app/getting-started/installation)
 and [uv installation guide](https://docs.astral.sh/uv/getting-started/installation/).
 Start PostgreSQL with `docker compose up -d postgres` if needed; Phase 0 health tests
@@ -126,7 +137,7 @@ notepad .env
 uv run python -m alembic upgrade head
 uv run ruff check .
 uv run ruff format --check .
-uv run python -m pytest
+uv run --with-editable ../sdk python -m pytest
 uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
@@ -136,6 +147,7 @@ Frontend, in another terminal from the repository root:
 cd frontend
 Copy-Item .env.example .env.local
 npm.cmd ci
+npm.cmd test
 npm.cmd run typecheck
 npm.cmd run build
 npm.cmd run dev
@@ -160,14 +172,14 @@ semantics, out-of-order ingestion, limits, and PostgreSQL integration-test comma
 
 ## Roadmap
 
-1. **Phase 0:** initialization and local infrastructure (implemented; Docker verification pending).
-2. **Phase 1:** trace schema, migrations, ingestion/retrieval APIs (current scope; database verification pending).
-3. **Phase 2:** Python SDK and OpenTelemetry/OpenInference instrumentation.
-4. **Phase 3:** dashboard and execution visualization.
+1. **Phase 0:** initialization and local infrastructure (locally verified).
+2. **Phase 1:** trace schema, migrations, ingestion/retrieval APIs (locally verified).
+3. **Phase 2A/2B:** explicit tracing SDK and Tool/LLM decorators (locally verified); automatic framework instrumentation remains planned.
+4. **Phase 3A:** Trace Explorer and interactive execution tree (locally verified); further dashboard work remains planned.
 5. **Phase 4:** deterministic rule-based failure detection.
 6. **Phase 5:** LLM-assisted diagnosis and fix recommendations.
 7. **Phase 6:** full integration tests, expanded CI/CD, release documentation.
 
 See [the development plan](docs/DEVELOPMENT_PLAN.md) for objectives, deliverables and
-acceptance criteria, and [AGENTS.md](AGENTS.md) for development rules. Phase 2 requires
-review and authorization before implementation.
+acceptance criteria, and [AGENTS.md](AGENTS.md) for development rules. Stop after Phase 3A;
+further implementation requires review and authorization.
