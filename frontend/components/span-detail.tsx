@@ -11,7 +11,7 @@ export function SpanDetail({ span, onSelectParent, parentAvailable }: {
   </aside>;
   const input = span.attributes["gen_ai.usage.input_tokens"];
   const output = span.attributes["gen_ai.usage.output_tokens"];
-  const tokens = (value: unknown) => typeof value === "number" && Number.isInteger(value) && value >= 0
+  const tokens = (value: unknown) => typeof value === "number" && Number.isSafeInteger(value) && value >= 0
     ? value.toLocaleString("en-US") : "Not recorded";
   return <aside className="detail-panel panel" aria-label="Span details">
     <div className="section-heading"><h2>Span details</h2><StatusBadge status={span.status_code} /></div>

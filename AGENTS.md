@@ -5,8 +5,11 @@
 Agent Debugger is an open-source observability and debugging infrastructure project for
 LLM agents, not a general-purpose chatbot. Use a modular monolith: one backend service,
 one frontend application, and PostgreSQL. Read `docs/DEVELOPMENT_PLAN.md` before changing
-scope. Implement only the phase authorized by the user. Phase 3A (Trace Explorer and
-interactive execution tree) is the current scope; stop for review before further work.
+scope. Implement only the phase authorized by the user. Features through Phase 5C2 are
+implemented. The latest request authorizes final QA, integration/acceptance verification,
+documentation, and confirmed acceptance-blocking defect fixes only. No new product features.
+Stop after final QA for review. Never apply a suggested edit or execute model-generated code.
+See the final QA checkpoint in `docs/VERIFICATION.md` for executed and deferred checks.
 Never infer authorization to push, publish, or deploy.
 
 ## Repository responsibilities
@@ -17,11 +20,27 @@ Never infer authorization to push, publish, or deploy.
 - `backend/app/models/`: SQLAlchemy 2 project/trace/span/event persistence models.
 - `backend/app/schemas/`: Pydantic v2 request and response contracts.
 - `backend/app/services/`: ingestion, idempotency, and parent graph rules.
+- `backend/app/services/fix_suggestions.py` and `fix_templates.py`: versioned, stateless
+  review-only proposals; no executed edits, fabricated causes or model-generated commands.
+- `backend/app/services/diagnostics/`: pure deterministic rules, evidence and recorded
+  outcome classification; `diagnostic_service.py` coordinates snapshot analysis.
+- `backend/app/services/replay.py`: immutable historical snapshots and deterministic
+  analysis replay, never proof of repair effectiveness.
+- `backend/app/services/evaluation.py` and `evaluation_runner.py`: explicit correctness
+  criteria, coverage-aware metrics, comparisons and registered trusted local functions.
+  The runner is not a security sandbox; never accept source code/import paths from data.
+- `backend/app/services/fix_validation.py`: source suggestion/reference validation,
+  developer-approved distinct registered implementations and frozen same-dataset execution.
+- `backend/app/fix_validation_demo.py`: explicit mock SDK/local-file demonstration only;
+  not imported by production routes and requires the existing optional editable SDK.
+- `backend/app/repositories/diagnostics.py`: bounded consistent read snapshots, sharing
+  the trace lock convention with ingestion; never persist diagnostic findings.
 - `backend/app/repositories/`: SQLAlchemy queries and transaction-scoped row locks.
 - `backend/alembic/`: versioned, self-contained PostgreSQL migrations.
 - `backend/tests/`: backend unit and API tests.
 - `frontend/app/`: Next.js App Router pages, layouts, and global styles.
-- `frontend/components/`: Trace Explorer, React Flow graph, safe span/event detail UI;
+- `frontend/components/`: Trace Explorer, React Flow graph, timeline, performance summary,
+  shared filters and safe span/event detail UI;
   `hooks/`: abortable client requests and state; `lib/`: API contracts and tree construction.
 - `frontend/tests/`: Vitest/jsdom model, API, component and graph selection regression tests.
 - `sdk/src/agent_debugger/`: explicit OTel context-manager tracing and API exporter.
@@ -39,11 +58,22 @@ Never infer authorization to push, publish, or deploy.
 - Update the affected lockfile when changing dependencies. Use `uv sync --frozen` and `npm ci`.
 - SQLAlchemy 2, migrations, and PostgreSQL JSONB are implemented in Phase 1.
   Phase 2A/2B use OpenTelemetry API/SDK for explicit tracing and Tool/LLM decorators.
-  Phase 3A uses React Flow for the read-only execution tree. Automatic instrumentation,
-  OpenInference/OTLP adapters and DeepSeek remain planned; add them only
-  in their authorized phases. Do not replace the host application's global OTel provider.
+  Phase 3A uses React Flow for the read-only execution tree. Phase 3B adds a timestamp-based
+  timeline and statistics without dependencies. Preserve microsecond timestamps, shared
+  selection and ancestor context when filtering. Never sum overlapping spans as elapsed
+  execution time or estimate missing tokens. Automatic instrumentation,
+  OpenInference/OTLP adapters remain planned; add them only in their authorized phases.
+  Phase 5A adds optional compatible-provider hypotheses with external processing disabled
+  by default; see `docs/AI_DIAGNOSIS.md`. Do not replace the host application's global
+  OTel provider.
 - Do not introduce Redis, Kafka, Kubernetes, microservices, agent frameworks, or
   additional external services without an explicit requirement.
+- Phase 4A findings must distinguish observed failures, heuristic warnings and data
+  quality. Require explicit retry metadata/fingerprints for loop warnings and explicit
+  root recovery evidence for recovered outcomes. Do not infer semantic success, prompts,
+  arguments, root causes or confidence percentages. Phase 4B must display backend outcome
+  classifications and reuse shared graph/timeline/detail selection; never infer recovery
+  from a later successful operation. Keep requests abortable and reject stale results.
 
 ## Testing and verification
 
@@ -58,6 +88,8 @@ Validate `docker compose --env-file .env.example config --quiet` from the root.
 For infrastructure work, start services when the environment permits, check `/health`,
 check the landing page and its browser connection status, and execute a PostgreSQL query.
 Add meaningful tests for changed behavior, including configuration and failure cases.
+For Phase 5C1/5C2, the user requests focused automated checks only. Defer full PostgreSQL/
+HTTP/browser/project-wide acceptance until after Phase 5C2 and label it unexecuted.
 Do not require a live database for Phase 0 unit tests. Do not claim a check passed unless
 it actually ran successfully; record environmental blockers and distinguish static
 validation from runtime verification. CI configuration is not evidence of a successful CI run.
@@ -77,6 +109,10 @@ current model metadata into a migration version. See `docs/TRACE_API.md` for con
 - Treat future traces and tool outputs as untrusted input. Validate at API boundaries;
   plan redaction, payload limits, and retention before exposing ingestion externally.
 - Do not send trace content to an LLM provider without an explicit product policy.
+- Phase 5A external analysis is disabled by default and requires per-request consent.
+  Use the documented 5a.1 allowlist, bounded input/output and validated evidence citations.
+  Keep deterministic findings available on provider failure. No paid live tests without
+  separate approval; mocked tests do not establish diagnostic accuracy.
 - Docker configuration is for local development; authentication, TLS, and production
   deployment hardening are outside Phase 0.
 

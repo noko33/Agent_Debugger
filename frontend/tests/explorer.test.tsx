@@ -6,15 +6,17 @@ import { TraceWorkspace } from "@/components/trace-workspace";
 import * as api from "@/lib/api";
 import type { SpanTree } from "@/lib/span-tree";
 import { pageFixture, spanFixture, traceFixture } from "./fixtures";
+import { diagnosticsFixture } from "./diagnostic-fixtures";
 
 vi.mock("@/lib/api", async importOriginal => ({
   ...await importOriginal<typeof import("@/lib/api")>(),
-  getTraces: vi.fn(), getTrace: vi.fn(), getSpans: vi.fn(),
+  getTraces: vi.fn(), getTrace: vi.fn(), getSpans: vi.fn(), getDiagnostics: vi.fn(),
 }));
 // jsdom has no measured canvas; actual React Flow interactions are checked in browser.
-vi.mock("@/components/span-graph", () => ({ SpanGraph: ({ tree, onSelect }: {
-  tree: SpanTree; onSelect: (id: string) => void;
+vi.mock("@/components/span-graph", () => ({ SpanGraph: ({ tree, onSelect, selectedId }: {
+  tree: SpanTree; onSelect: (id: string) => void; selectedId: string | null;
 }) => <div aria-label="Graph test double">{tree.nodes.map(node => <button key={node.span.span_id}
+  aria-pressed={selectedId === node.span.span_id}
   onClick={() => onSelect(node.span.span_id)}>{node.span.name}</button>)}</div> }));
 
 const root = spanFixture("1", null, { name: "Root agent", operation_type: "agent" });
@@ -23,9 +25,68 @@ const tool = spanFixture("2", "1", { name: "Optional tool", operation_type: "too
 const loaded = { trace: traceFixture, spans: { spans: [root, tool], total: 2, truncated: false } };
 
 beforeEach(() => {
+  vi.mocked(api.getDiagnostics).mockReset().mockResolvedValue(diagnosticsFixture);
   vi.mocked(api.getTraces).mockReset().mockResolvedValue(pageFixture([traceFixture]));
   vi.mocked(api.getTrace).mockReset().mockResolvedValue(traceFixture);
   vi.mocked(api.getSpans).mockReset().mockResolvedValue(loaded.spans);
+});
+
+it("synchronizes graph, timeline, details and parent selection across filters", () => {
+  render(<TraceWorkspace data={loaded} />);
+  fireEvent.click(screen.getByRole("button", { name: "Optional tool" }));
+  fireEvent.click(screen.getByRole("button", { name: "Timeline" }));
+  expect(screen.getByRole("button", { name: "Timeline span Optional tool" }).getAttribute("aria-pressed")).toBe("true");
+  fireEvent.change(screen.getByLabelText("Span kind"), { target: { value: "tool" } });
+  expect(screen.getByRole("button", { name: "Timeline span Root agent" }).textContent).toContain("Context");
+  fireEvent.click(screen.getByRole("button", { name: "Timeline span Root agent" }));
+  fireEvent.click(screen.getByRole("button", { name: "Graph" }));
+  expect(screen.getByRole("button", { name: "Root agent" }).getAttribute("aria-pressed")).toBe("true");
+  fireEvent.change(screen.getByLabelText("Name search"), { target: { value: "missing" } });
+  expect(screen.getByText("No spans match these filters.")).toBeDefined();
+  expect(screen.getByText(/Selected span is hidden by filters/)).toBeDefined();
+  expect(within(screen.getByRole("complementary", { name: "Span details" })).getByText("Root agent")).toBeDefined();
+  fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+  fireEvent.change(screen.getByLabelText("Status"), { target: { value: "error" } });
+  fireEvent.click(screen.getByRole("button", { name: "Timeline" }));
+  fireEvent.click(screen.getByRole("button", { name: "Timeline span Optional tool" }));
+  fireEvent.click(screen.getByRole("button", { name: "Inspect parent" }));
+  expect(screen.getByRole("button", { name: "Timeline span Root agent" }).getAttribute("aria-pressed")).toBe("true");
+  expect(screen.getByRole("region", { name: "Performance summary" }).textContent).toContain("2 / 2");
+});
+
+it("shows overlapping bar geometry, zero markers and incomplete spans without inventing duration", () => {
+  const spans = [root,
+    { ...tool, start_time: "2026-10-12T00:00:00.100Z", end_time: "2026-10-12T00:00:00.700Z", duration_ms: 600 },
+    spanFixture("3", "1", { start_time: "2026-10-12T00:00:00.300Z", end_time: "2026-10-12T00:00:00.800Z", duration_ms: 500 }),
+    spanFixture("4", "1", { end_time: null, duration_ms: null }),
+    spanFixture("5", "1", { end_time: root.start_time, duration_ms: 0 })];
+  render(<TraceWorkspace data={{ ...loaded, spans: { spans, total: 5, truncated: false } }} />);
+  fireEvent.click(screen.getByRole("button", { name: "Timeline" }));
+  const first = screen.getByTestId(`bar-${tool.span_id}`);
+  const second = screen.getByTestId(`bar-${spanFixture("3").span_id}`);
+  expect(first.style.left).toBe("10%"); expect(first.style.width).toBe("60%");
+  expect(second.style.left).toBe("30%"); expect(second.style.width).toBe("50%");
+  expect(screen.getByTestId(`bar-${spanFixture("4").span_id}`).className).toContain("bar-incomplete");
+  expect(screen.getByTestId(`bar-${spanFixture("5").span_id}`).style.width).toBe("0%");
+});
+
+it("marks partial statistics and selects a slowest span even when filtered out", () => {
+  render(<TraceWorkspace data={{ ...loaded, spans: { ...loaded.spans, total: 10, truncated: true } }} />);
+  const summary = screen.getByRole("region", { name: "Performance summary" });
+  expect(summary.textContent).toContain("statistics cover 2 of 10");
+  fireEvent.change(screen.getByLabelText("Name search"), { target: { value: "missing" } });
+  fireEvent.click(within(summary).getByRole("button", { name: "Inspect slow span Optional tool", hidden: true }));
+  expect(within(screen.getByRole("complementary", { name: "Span details" })).getByText("Optional tool")).toBeDefined();
+});
+
+it("keeps invalid timing rows selectable without rendering a negative duration bar", () => {
+  const span = { ...tool, start_time: "2026-10-12T00:00:00.700Z", end_time: "2026-10-12T00:00:00.100Z", duration_ms: -600 };
+  render(<TraceWorkspace data={{ ...loaded, spans: { spans: [root, span], total: 2, truncated: false } }} />);
+  fireEvent.click(screen.getByRole("button", { name: "Timeline" }));
+  expect(screen.getByText("Invalid timing; duration unavailable.")).toBeDefined();
+  expect(screen.getByTestId(`bar-${tool.span_id}`).style.width).toBe("0%");
+  fireEvent.click(screen.getByRole("button", { name: "Timeline span Optional tool" }));
+  expect(within(screen.getByRole("complementary", { name: "Span details" })).getByText("Invalid timing")).toBeDefined();
 });
 
 it("shows loading and initial trace selection guidance", () => {
@@ -61,7 +122,7 @@ it("loads selected trace, selects a graph span, and navigates to its parent", as
 it("supports keyboard-accessible span list selection", () => {
   render(<TraceWorkspace data={loaded} />);
   fireEvent.click(screen.getByRole("button", { name: "Span list" }));
-  fireEvent.click(screen.getByRole("button", { name: /Optional tool/ }));
+  fireEvent.click(within(screen.getByRole("list", { name: "Spans" })).getByRole("button", { name: /Optional tool/ }));
   expect(within(screen.getByRole("complementary", { name: "Span details" })).getByText("Optional tool")).toBeDefined();
 });
 it("shows empty spans and incomplete graph warnings", () => {

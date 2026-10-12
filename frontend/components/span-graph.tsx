@@ -7,11 +7,11 @@ import { durationLabel, type SpanRecord } from "@/lib/traces";
 import { StatusBadge } from "./trace-format";
 
 type SpanNode = Node<{
-  span: SpanRecord; exception: boolean; warning?: string; onSelect: (id: string) => void;
+  span: SpanRecord; exception: boolean; warning?: string; context?: boolean; highlighted?: boolean; onSelect: (id: string) => void;
 }, "span">;
 
 function ExecutionNode({ data, selected }: NodeProps<SpanNode>) {
-  return <div className={`execution-node operation-${data.span.operation_type} ${data.exception ? "has-exception" : ""} ${selected ? "is-selected" : ""}`}>
+  return <div className={`execution-node operation-${data.span.operation_type} ${data.exception || data.span.status_code === "error" ? "has-exception" : ""} ${selected ? "is-selected" : ""} ${data.context ? "filter-context" : ""} ${data.highlighted ? "diagnostic-related" : ""}`}>
     <Handle type="target" position={Position.Left} />
     <button type="button" className="nodrag nopan node-content"
       aria-label={`Inspect span ${data.span.name}`} aria-pressed={selected}
@@ -21,6 +21,8 @@ function ExecutionNode({ data, selected }: NodeProps<SpanNode>) {
     <strong>{data.span.name}</strong>
     <span className="node-footline"><span>{durationLabel(data.span)}</span>
       {data.exception && <span className="exception-label">Exception</span>}
+      {data.highlighted && <span>Diagnostic evidence</span>}
+      {data.context && <span>Context</span>}
       {data.warning && <span title={data.warning}>⚠ Parent link</span>}
     </span>
     </button>
@@ -29,16 +31,16 @@ function ExecutionNode({ data, selected }: NodeProps<SpanNode>) {
 }
 const nodeTypes = { span: ExecutionNode };
 
-export function SpanGraph({ tree, selectedId, onSelect }: {
-  tree: SpanTree; selectedId: string | null; onSelect: (id: string) => void;
+export function SpanGraph({ tree, selectedId, onSelect, contextIds, highlightedIds }: {
+  tree: SpanTree; selectedId: string | null; onSelect: (id: string) => void; contextIds?: Set<string>; highlightedIds?: Set<string>;
 }) {
   const nodes = useMemo<SpanNode[]>(() => tree.nodes.map(node => ({
     id: node.span.span_id, type: "span", position: node.position,
     selected: node.span.span_id === selectedId,
     ariaLabel: `Select span ${node.span.name}`, data: {
-      span: node.span, exception: node.exception, warning: node.warning, onSelect,
+      span: node.span, exception: node.exception, warning: node.warning, onSelect, context: contextIds?.has(node.span.span_id), highlighted: highlightedIds?.has(node.span.span_id),
     },
-  })), [tree, selectedId, onSelect]);
+  })), [tree, selectedId, onSelect, contextIds, highlightedIds]);
   const edges = useMemo(() => tree.nodes.filter(node => node.parentId !== null).map(node => ({
     id: `${node.parentId}-${node.span.span_id}`, source: node.parentId!, target: node.span.span_id,
     type: "smoothstep", style: { stroke: "#64748b", strokeWidth: 1.5 },

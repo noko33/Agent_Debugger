@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
+from app.core.errors import APIError
 from app.repositories.traces import SpanKey
 from app.schemas.traces import (
     ProjectCreate,
@@ -48,6 +49,17 @@ class MemoryRepository:
         ]
         rows.sort(key=lambda row: (row.start_time, row.trace_id), reverse=True)
         return rows[offset : offset + limit], len(rows)
+
+    def snapshot(
+        self, trace_id: str, project_id: UUID | None, max_spans: int
+    ) -> tuple[TraceRead, list[SpanRead]] | None:
+        trace = self.get_trace(trace_id)
+        if trace is None or (project_id is not None and trace.project_id != project_id):
+            return None
+        spans, count = self.list_spans(trace_id, max_spans + 1, 0)
+        if count > max_spans:
+            raise APIError(413, "diagnostic_span_limit", "Trace exceeds the diagnostic span limit")
+        return trace, spans
 
     def lock_traces(self, trace_ids: list[str]) -> set[str]:
         return set(trace_ids) & self.traces.keys()

@@ -1,4 +1,6 @@
 import type { Page, SpanRecord, TraceRecord } from "./traces";
+import { parseDiagnostics } from "./diagnostics";
+import { parseFixSuggestions } from "./fix-suggestions";
 
 export type HealthResponse = {
   status: "ok";
@@ -83,6 +85,23 @@ export async function getTrace(traceId: string, signal?: AbortSignal): Promise<T
   const value = await request(`/traces/${traceId}`, signal);
   if (!isTrace(value) || value.trace_id !== traceId) throw new Error("Trace API returned an unexpected trace.");
   return value;
+}
+
+export async function getDiagnostics(traceId: string, projectId: string, signal?: AbortSignal) {
+  if (!identifier(traceId, 32)) throw new Error("Invalid trace ID.");
+  return parseDiagnostics(await request(`/traces/${traceId}/diagnostics?project_id=${encodeURIComponent(projectId)}`, signal), traceId, projectId);
+}
+
+export async function getFixSuggestions(traceId: string, projectId: string, includeAi: boolean, consent: boolean, signal?: AbortSignal) {
+  if (!identifier(traceId, 32)) throw new Error("Invalid trace ID.");
+  const timeout = AbortSignal.timeout(70_000);
+  const response = await fetch(`${apiBaseUrl}/api/v1/traces/${traceId}/fix-suggestions?project_id=${encodeURIComponent(projectId)}`, {
+    method: "POST", headers: { Accept: "application/json", "Content-Type": "application/json" }, cache: "no-store",
+    body: JSON.stringify({ include_ai: includeAi, consent_to_external_processing: consent }),
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+  });
+  if (!response.ok) throw new Error(`Trace API returned HTTP ${response.status}.`);
+  return parseFixSuggestions(await response.json(), traceId, projectId);
 }
 
 export interface LoadedSpans { spans: SpanRecord[]; total: number; truncated: boolean }

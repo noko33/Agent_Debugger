@@ -8,7 +8,16 @@ functionality, not existing capabilities. Phase 0 and Phase 1 code are implement
 Phase 0 and Phase 1 local runtime acceptance passed on 2026-10-12 after Docker/WSL
 recovery, including all 32 PostgreSQL integration tests. Phase 2A is authorized and
 implemented and locally verified. Phase 2B explicit Tool/LLM decorators are verified.
-Phase 3A adds the Trace Explorer and read-only execution tree; further scope requires review.
+Phase 3A adds the Trace Explorer and read-only execution tree. Phase 3B adds the timeline,
+performance summary and consistent span filtering. Phase 4A adds deterministic on-demand
+failure analysis; Phase 4B integrates interactive diagnostic findings and evidence navigation.
+Phase 5A through 5C2 are implemented. The latest request authorizes Final QA only:
+integration/acceptance checks, documentation and confirmed blocking defect fixes.
+The 2026-10-13 checkpoint verifies 432 distinct backend tests (121 PostgreSQL), 59 SDK
+tests and 63 frontend tests, builds, real HTTP fix validation and core browser navigation.
+See `VERIFICATION.md` for remaining browser edge scenarios and publication limitations;
+these are not claims of completed CI/production acceptance. No new features were added.
+Further expansion requires review.
 Verification results and environment limitations are recorded in `VERIFICATION.md`.
 
 ## Phase 0 — Project initialization
@@ -112,7 +121,7 @@ redaction hooks, and shutdown/flush behavior; a small instrumented example.
 timestamps, errors, and tool boundaries survive round-trip; exporter outages do not crash
 the host application; SDK and exporter tests pass; sensitive fields can be redacted.
 
-## Phase 3 — Next.js dashboard and execution visualization (Phase 3A implemented)
+## Phase 3 — Next.js dashboard and execution visualization (Phase 3A/3B implemented)
 
 ### Phase 3A — Trace Explorer and interactive execution tree
 
@@ -137,10 +146,33 @@ Use API-derived durations to retain microsecond precision. Attributes/events are
 React text. No streaming, filtering dashboard expansion, diagnosis or repair is included.
 Large graph virtualization/performance tuning and further dashboard scope remain planned.
 
+### Phase 3B — Trace Timeline and Performance Analysis (implemented; locally verified)
+
+**Objectives:** inspect actual span timing, overlapping operations and recorded performance
+metadata without inventing elapsed time or missing usage.
+
+**Deliverables:** dependency-free waterfall using microsecond timestamps; shared Graph/
+Timeline/List/detail selection; kind/status/name filters retaining loaded ancestors;
+wall-clock trace duration, span/error/LLM/tool counts, recorded token totals with coverage,
+and selectable slowest spans. Missing/invalid timing remains explicit and inspectable.
+
+**Acceptance criteria:** overlapping bars share one trace-relative axis; zero-duration and
+incomplete records are distinct; filtering preserves hierarchy and details; tests cover
+timing, aggregation, filters and synchronized selection; frontend tests/typecheck/build
+and backend regressions pass. Verify the original example and an isolated known-timing
+synthetic trace through the real browser/backend/PostgreSQL stack. Stop for review here.
+
+**Decisions and limits:** timestamps are subtracted as integer microseconds; valid values
+are converted to milliseconds only afterward. Statistics use all loaded unique spans,
+not the filtered subset. Partial loading and token coverage are labeled. Ranking uses
+inclusive durations, not exclusive time or critical-path estimates. No storage, SDK or
+API changes, new libraries, streaming, classification or diagnosis. Large-trace browser
+benchmarks, virtualization and timeline zoom remain outside this increment.
+
 ### Full Phase 3 roadmap
 
-The original objectives below include the Phase 3A subset already delivered. Expanded
-filtering, dashboard capabilities and large-graph performance work require further review.
+The original objectives below include the Phase 3A/3B subsets already delivered. Further
+dashboard capabilities and large-graph performance work require further review.
 
 **Objectives:** let developers find executions and inspect their structure and context.
 
@@ -152,7 +184,60 @@ empty, and failure states. Use real API data rather than presenting mock data as
 relationships match stored data; API failures are recoverable; representative large
 traces remain usable; component and end-to-end tests cover core navigation.
 
-## Phase 4 — Rule-based failure detection (planned)
+## Phase 4 — Rule-based failure detection (Phase 4A/4B implemented; locally verified)
+
+### Phase 4A — Deterministic Agent Failure Analysis and Classification
+
+**Objectives:** classify recorded operation errors and observable data/performance issues
+with explainable, reproducible evidence. Separate operation findings from Agent outcome.
+
+**Deliverables:** pure modular rules for Tool/LLM errors, repeated tool failures,
+evidence-gated possible retry loops, slow spans and incomplete/inconsistent traces;
+versioned Pydantic findings and recovery/outcome contracts; validated server thresholds;
+bounded consistent PostgreSQL snapshots; read-only trace diagnostics API; labeled fixtures,
+category evaluation, unit and real PostgreSQL/API tests; taxonomy and limitations guide.
+
+**Acceptance criteria:** all findings reference recorded evidence, thresholds and IDs;
+ordinary repetition/concurrency without required retry metadata is not called a loop;
+failed optional operations with explicit recovery do not become overall Agent failures;
+missing evidence yields unknown outcome instead of invented root causes. No prompts,
+raw arguments or fabricated confidence percentages. All stored spans are analyzed or an
+explicit size error is returned. Tests include real PostgreSQL snapshots, malformed data,
+scope, limits, recovery and readonly behavior. Stop for review before Phase 4B.
+
+**Decisions and limits:** analyze on demand, with no persistence or migrations. A shared
+trace lock follows ingestion's row-lock convention. Exact same-name failures are observed
+repetition, not proven retries; loop warnings require opt-in input fingerprints and
+explicit retry grouping/attempts. Root OK plus a recovery event after all recorded failures
+is self-reported recovery, not semantic correctness. See `DIAGNOSTICS.md` for conditions
+and known risks; designed fixture scores are not general-world accuracy claims.
+
+### Phase 4B — Interactive Diagnostics Dashboard and Evidence Navigation
+
+**Objectives:** investigate actual backend findings in the existing Explorer without
+inventing diagnoses or conflating child errors with overall execution failure.
+
+**Deliverables:** typed, runtime-validated diagnostics client; abortable request/retry
+state; recorded outcome and evidence panel; category groups/counts and severity/category
+filters; shared selection with Graph/Timeline/List/details; multi-span highlighting and
+explicit missing/filtered reference fallbacks; focused frontend tests and live browser checks.
+
+**Acceptance criteria:** real seven-span sample shows Recovered and its Optional enrichment
+error; finding navigation selects the stored exception span across views. Verify separate
+repeated-failure and no-finding traces. Late requests cannot overwrite a different trace;
+filters preserve selected details; missing references never become fabricated spans.
+Frontend tests, TypeScript, production build and backend regressions pass. Stop for review.
+
+**Decisions and limits:** reuse Phase 4A endpoint, outcomes and allowlisted evidence;
+no engine, storage, SDK, migration or dependency changes. Diagnostic filters only hide
+cards, while span filters apply consistently to existing views. Category counts describe
+all findings, not a risk score. Analysis covers currently stored spans; graph loading and
+diagnostics are separate snapshots. No live updates, semantic diagnosis or Phase 5 work.
+
+### Remaining Phase 4 — Planned, not authorized by Phase 4B
+
+Expanded rules and broader evaluations require separate approval. The original full-phase
+objectives below remain the roadmap.
 
 **Objectives:** identify deterministic, explainable execution failure patterns.
 
@@ -165,7 +250,133 @@ avoid false positives; every finding links to trace evidence and its rule versio
 results are deterministic and queryable; unsupported claims are not inferred from
 missing instrumentation.
 
-## Phase 5 — LLM-assisted diagnosis and fix recommendations (planned)
+## Phase 5 — LLM-assisted diagnosis and fix recommendations
+
+### Phase 5A — Evidence-grounded LLM hypotheses (locally verified)
+
+**Objectives:** supplement the existing deterministic snapshot with optional, bounded,
+reviewable hypotheses. Never replace recorded findings or equate child errors with overall
+failure. The user's explicit continuation authorizes this phase.
+
+**Deliverables:** allowlisted context policy 5a.1; server-controlled compatible-provider
+adapter; strict structured output, evidence/span reference checks and conservative claim
+guards; explicit consent-based POST API; per-process cooldown/concurrency bounds;
+scripted evaluation fixtures and database/API tests. No persistence or frontend expansion.
+
+**Acceptance criteria:** disabled/consent-required requests make no external call;
+sensitive records are omitted; budgets and omissions are visible; provider failures retain
+deterministic findings; references exist in the actual included snapshot; recovery is
+preserved. Backend and SDK regressions pass; focused real PostgreSQL tests pass.
+Live paid model tests require separate approval and are not required for automated tests.
+
+**Current result (2026-10-13):** 296 backend tests, including 96 PostgreSQL tests,
+and 59 SDK tests pass with zero failures/skips. All 29 Phase 5A PostgreSQL checks and
+three added real TCP HTTP checks passed. Docker services, migration head and the existing
+container AI endpoint were verified. No paid provider was called; model accuracy remains
+unevaluated. See `AI_DIAGNOSIS.md` and `VERIFICATION.md`. Subsequent phases have their
+own authorization boundaries below.
+
+### Phase 5B — Evidence-grounded repair suggestions (implemented; browser acceptance deferred)
+
+**Authorization:** the user's attached Phase 5B request authorizes this phase only.
+The previous Phase 5A review boundary remains historical. The later attached request
+accepts implementation and defers browser verification until final acceptance after 5C2.
+
+**Objectives:** translate observed patterns and optionally validated hypothesis references
+into reviewable proposals, never executed edits, claimed repairs or guessed causes.
+
+**Deliverables:** stateless POST fix-suggestions API; versioned deterministic templates for
+PROMPT, TOOL_POLICY, RUNTIME and INSTRUMENTATION; stable IDs, sanitized evidence, risks,
+preconditions, missing evidence and validation plans; no second model request for wording;
+minimal manual request/navigation in the existing Diagnostics Panel.
+
+**Acceptance criteria:** evidence gates and unknown/recovery behavior are covered; bad model
+responses never remove deterministic proposals; consent/privacy/cooldown are reused;
+all references are valid and proposals deduplicated; backend/SDK/frontend regressions and
+real HTTP/PostgreSQL checks pass. Verify manual request, disclosure and shared span selection
+in a real browser separately from jsdom/build checks.
+
+**Current result:** backend 354 tests (including 120 PostgreSQL), SDK 59 tests and frontend
+63 tests pass; TypeScript and production build pass. Actual container APIs verified retained
+recovered, repeated-failure and no-finding traces. Browser automation could not initialize
+safely; the user subsequently deferred browser acceptance. See `FIX_SUGGESTIONS.md`
+and `VERIFICATION.md`. These counts are historical, not rerun by Phase 5C1.
+
+### Phase 5C1 — Replay harness and evaluation framework (implemented; focused verification)
+
+**Authorization:** the latest attached request authorizes 5C1 only. No automatic repair,
+fix-validation orchestration, paid model tests or Phase 5C2 work.
+
+**Objectives:** establish reproducible analysis replay and an explicit correctness-based
+evaluation foundation. Historical trace replay must never establish repair effectiveness.
+
+**Deliverables:** immutable canonical snapshots using the existing consistent repository;
+recorded deterministic rule configurations/results and finding/evidence comparison;
+Pydantic dataset/case/run/result/metric/comparison contracts; exact/structured validators;
+coverage-aware timing, usage, failure and recovery metrics; stable-case baseline/candidate
+comparison; registered trusted sync/async local functions with process deadlines and
+bounded JSON outputs; deterministic example, focused tests and `EVALUATION.md`.
+
+**Acceptance criteria for this increment:** replay reproducibility, changed thresholds,
+missing/malformed/partial data, explicit labels/validators and unknown outcomes are tested;
+comparison rejects mismatched cases/configurations and analysis-only repair claims;
+concurrent spans do not inflate wall time; missing usage stays null; explicit recovery
+remains separate from semantic success; runner failures/timeouts are bounded. Focused
+tests and Ruff/format checks pass. Full PostgreSQL/HTTP/SDK/frontend/browser regression
+is explicitly deferred until final acceptance after 5C2 and must not be claimed passed.
+
+**Limits:** trusted execution is not a security sandbox; termination cannot undo side
+effects. One trace observation per case, no automatic trace merge, no persisted platform
+experiment store, causal significance test or automatic candidate application. See
+`VERIFICATION.md` for actual results. Stop for review before 5C2.
+
+**Focused result (2026-10-13):** 141 tests passed (61 new and 80 existing diagnostic/
+suggestion regressions), zero failures/skips; Ruff and formatting passed. The separate
+local arithmetic example produced the expected baseline/candidate comparison. This is
+not full-stack acceptance; the explicitly deferred checks remain unexecuted.
+
+### Phase 5C2 — Agent fix validation and controlled re-execution (implemented)
+
+**Authorization:** the latest attachment explicitly authorizes 5C2, superseding the
+historical 5C1 review boundary. It still defers full final acceptance and prohibits
+automatic code edits, arbitrary execution, paid models and deployment/push.
+
+**Objectives:** connect an existing suggestion to developer-approved baseline/candidate
+execution using the existing evaluation foundation. No reinterpretation of historical
+traces as proof of a repair and no new execution HTTP endpoint.
+
+**Deliverables:** reference-validated `FixValidationService`; typed implementation/change/
+result contracts; frozen shared dataset and same validators/configuration; distinct
+registered sync/async functions; recorded provenance, trace IDs, missing evidence,
+per-case/aggregate comparison and trade-offs; real SDK/local mock transport demonstration;
+focused tests. Reuse 5C1 metrics and existing deterministic findings/recovery rules.
+
+**Acceptance for this increment:** both supplied implementations actually execute;
+approval and references are checked before execution; fixtures show normal and fault
+cases, explicit recovery and preserved operation errors; unknown outcomes/missing evidence
+remain explicit; limits/errors, regression/inconclusive classifications, artifact round-trip
+and prevention of data-driven source execution are tested. Run focused regressions and
+lint/format checks. Project-wide PostgreSQL/HTTP/frontend/browser acceptance remains deferred.
+
+**Confirmed 5C1 correction:** equal aggregate metric coverage can hide different covered
+cases. Comparisons now also verify per-case coverage signatures before computing deltas.
+No database, SDK, frontend, infrastructure or dependency redesign.
+
+**Limits:** trusted local execution is not a security sandbox; managed worker termination
+does not guarantee all synchronous/descendant/external work ends or undo side effects.
+One trace observation per case, unsigned local provenance and descriptive single-run
+comparisons; no statistical/causal efficacy claim. See `EVALUATION.md`/`VERIFICATION.md`.
+Stop after 5C2 for review; final acceptance and later features require authorization.
+
+**Focused result (2026-10-13):** 157 tests passed, zero failures/skips; 16 new checks
+including a metric-coverage correction. Ruff/formatting passed. The real local mock SDK
+example reports 50%→100% task success with preserved Tool errors and explicit recovery.
+This is local fixture evidence, not full PostgreSQL/HTTP/browser acceptance.
+
+### Remaining Phase 5 — Planned, not authorized
+
+Any further fix orchestration or expanded evaluation capabilities require review.
+The broader original roadmap follows.
 
 **Objectives:** supplement rule evidence with reviewable diagnoses and recommendations.
 

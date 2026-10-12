@@ -5,11 +5,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import sessionmaker
 
+from app.api.ai_diagnosis import router as ai_router
+from app.api.diagnostics import router as diagnostic_router
+from app.api.fix_suggestions import router as fix_router
 from app.api.health import router as health_router
 from app.api.traces import router as trace_router
 from app.core.config import Settings, get_settings
 from app.core.database import make_engine
 from app.core.errors import install_error_handlers
+from app.services.ai_diagnosis.service import AnalysisGuard
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -29,6 +33,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 engine.dispose()
 
     application = FastAPI(title=config.app_name, version="0.2.0", lifespan=lifespan)
+    application.state.diagnostic_parameters = config.diagnostics
+    application.state.ai_settings = config.ai
+    application.state.ai_guard = AnalysisGuard()
     application.add_middleware(
         CORSMiddleware,
         allow_origins=config.cors_origins,
@@ -38,6 +45,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     application.include_router(health_router)
     application.include_router(trace_router)
+    application.include_router(diagnostic_router)
+    application.include_router(ai_router)
+    application.include_router(fix_router)
     install_error_handlers(application)
     return application
 

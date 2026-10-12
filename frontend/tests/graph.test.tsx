@@ -31,4 +31,18 @@ it("real React Flow nodes select once and accept externally selected parents wit
   rerender(<SpanGraph tree={tree} selectedId={spanFixture("1").span_id} onSelect={onSelect} />);
   expect((await screen.findByRole("button", { name: "Inspect span Span 1" })).getAttribute("aria-pressed")).toBe("true");
   expect(onSelect).toHaveBeenCalledTimes(1);
+  rerender(<SpanGraph tree={tree} selectedId={spanFixture("1").span_id} onSelect={onSelect}
+    contextIds={new Set([spanFixture("1").span_id])} />);
+  const parent = await screen.findByRole("button", { name: "Inspect span Span 1" });
+  expect(parent.parentElement?.className).toContain("filter-context");
+  expect(parent.textContent).toContain("Context");
+  expect(parent.getAttribute("aria-pressed")).toBe("true");
+  rerender(<SpanGraph tree={tree} selectedId={spanFixture("2").span_id} onSelect={onSelect}
+    highlightedIds={new Set(tree.nodes.map(node => node.span.span_id))} />);
+  for (const name of ["Span 1", "Span 2"]) {
+    const button = await screen.findByRole("button", { name: `Inspect span ${name}` });
+    expect(button.parentElement?.className).toContain("diagnostic-related");
+    expect(button.textContent).toContain("Diagnostic evidence");
+  }
+  expect(onSelect).toHaveBeenCalledTimes(1);
 });
